@@ -518,4 +518,218 @@ async function handleJournalSubmit(e) {
       batch.set(ref, { ...data, createdAt: serverTimestamp() });
     }
     // Perbarui pemetaan pelajaran -> guru terakhir (menggantikan saran sebelumnya)
-    
+    if (data.teacher) {
+      batch.set(
+        doc(db, "meta", "subjectTeachers"),
+        { teachers: { [data.subject]: data.teacher } },
+        { merge: true }
+      );
+    }
+    await withTimeout(batch.commit());
+
+    // Perbarui state lokal
+    if (data.teacher) state.teachers[data.subject] = data.teacher;
+    if (editing) {
+      const i = state.journals.findIndex((x) => x.id === editing);
+      if (i >= 0) state.journals[i] = { ...state.journals[i], ...data };
+    } else {
+      state.journals.push({ id: ref.id, ...data, _ms: Date.now() });
+    }
+    sortJournals();
+    state.journalsLoaded = true;
+    state.journalsError = null;
+
+    toast(editing ? "Jurnal berhasil diperbarui." : "Jurnal berhasil disimpan.");
+    resetForm({ keepDate: !editing });
+    renderJournalList();
+    renderSchedule();
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err), "error");
+  } finally {
+    state.saving = false;
+    setBusy(f.submit, false);
+  }
+}
+
+async function deleteJournal(id) {
+  const j = state.journals.find((x) => x.id === id);
+  if (!j) return;
+  const ok = await confirmDialog(`Jurnal ${j.subject} tanggal ${formatDateLong(j.date)} akan dihapus permanen.`);
+  if (!ok) return;
+
+  const btn = $(`[data-action="delete"][data-id="${CSS.escape(id)}"]`);
+  setBusy(btn, true);
+  try {
+    assertOnline();
+    await withTimeout(deleteDoc(doc(db, "journals", id)));
+    state.journals = state.journals.filter((x) => x.id !== id);
+    if (state.editingId === id) resetForm();
+    renderJournalList();
+    toast("Jurnal dihapus.");
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err), "error");
+    setBusy(btn, false);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Profil
+// ---------------------------------------------------------------------
+async function handleProfileSubmit(e) {
+  e.preventDefault();
+  const input = $("#p-name");
+  const btn = $("#profile-submit");
+  const name = input.value.trim().replace(/\s+/g, " ");
+  if (!name) { setFieldError(input, "Nama tidak boleh kosong."); input.focus(); return; }
+  if (name.length > 40) { setFieldError(input, "Nama maksimal 40 karakter."); input.focus(); return; }
+  setFieldError(input, "");
+
+  setBusy(btn, true);
+  try {
+    assertOnline();
+    await withTimeout(setDoc(doc(db, "meta", "profile"), { name }, { merge: true }));
+    state.profileName = name;
+    renderGreeting();
+    toast("Profil disimpan.");
+  } catch (err) {
+    console.error(err);
+    toast(friendlyError(err), "error");
+  } finally {
+    setBusy(btn, false);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Login / logout
+// ---------------------------------------------------------------------
+async function handleLogin(e) {
+  e.preventDefault();
+  const emailEl = $("#login-email");
+  const passEl = $("#login-password");
+  const errEl = $("#login-error");
+  const btn = $("#login-btn");
+  errEl.hidden = true;
+
+  const email = emailEl.value.trim();
+  const pass = passEl.value;
+  let ok = true;
+  if (!email) { setFieldError(emailEl, "Email wajib diisi."); ok = false; }
+  else if (!/^\S+@\S+\.\S+$/.test(email)) { setFieldError(emailEl, "Format email tidak valid."); ok = false; }
+  else setFieldError(emailEl, "");
+  if (!pass) { setFieldError(passEl, "Password wajib diisi."); ok = false; } else setFieldError(passEl, "");
+  if (!ok) return;
+
+  setBusy(btn, true);
+  try {
+    await withTimeout(signInWithEmailAndPassword(auth, email, pass));
+    passEl.value = "";
+  } catch (err) {
+    console.error(err);
+    errEl.textContent = friendlyError(err);
+    errEl.hidden = false;
+  } finally {
+    setBusy(btn, false);
+  }
+}
+
+async function handleLogout() {
+  try { await signOut(auth); }
+  catch (err) { console.error(err); toast(friendlyError(err), "error"); }
+}
+
+function resetState() {
+  state.teachers = {};
+  state.profileName = "";
+  state.journals = [];
+  state.journalsLoaded = false;
+  state.journalsError = null;
+  filt.date.value = "";
+  filt.subject.value = "";
+  renderAll();
+  resetForm();
+}
+
+// ---------------------------------------------------------------------
+// Event
+// ---------------------------------------------------------------------
+function bindEvents() {
+  window.addEventListener("hashchange", route);
+  $("#login-form").addEventListener("submit", handleLogin);
+  $("#logout-btn").addEventListener("click", handleLogout);
+  $("#profile-form").addEventListener("submit", handleProfileSubmit);
+
+  // Form jurnal
+  f.form.addEventListener("submit", handleJournalSubmit);
+  f.cancel.addEventListener("click", () => resetForm());
+  f.date.addEventListener("change", () => { checkDateField(); applyPeriodPrefill(); });
+  f.subject.addEventListener("change", () => {
+    setFieldError(f.subject, "");
+    applyTeacherSuggestion(); // <- saran guru otomatis
+    applyPeriodPrefill();
+  });
+  f.teacher.addEventListener("input", () => {
+    // Field dianggap "diubah manual" selama ada isinya; kalau dikosongkan, saran boleh masuk lagi.
+    state.teacherTouched = f.teacher.value.trim() !== "";
+    setFieldError(f.teacher, "");
+    updateTeacherHint();
+  });
+  f.period.addEventListener("input", () => {
+    state.periodTouched = f.period.value !== "";
+    f.periodHint.hidden = true;
+    setFieldError(f.period, "");
+  });
+  f.topic.addEventListener("input", () => setFieldError(f.topic, ""));
+
+  // Filter & aksi daftar
+  filt.date.addEventListener("change", renderJournalList);
+  filt.subject.addEventListener("change", renderJournalList);
+  filt.reset.addEventListener("click", () => { filt.date.value = ""; filt.subject.value = ""; renderJournalList(); });
+  $("#journal-list").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const { action, id } = btn.dataset;
+    if (action === "edit") startEdit(id);
+    else if (action === "delete") deleteJournal(id);
+    else if (action === "retry") loadAll();
+  });
+}
+
+// ---------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------
+function init() {
+  fillSubjectSelects();
+  bindEvents();
+  renderGreeting();
+  renderSchedule();
+  resetForm();
+  route();
+
+  if (!configReady || !auth) {
+    showScreen("login");
+    $("#config-warning").hidden = false;
+    $("#login-btn").disabled = true;
+    return;
+  }
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      state.user = user;
+      showScreen("app");
+      route();
+      loadAll();
+    } else {
+      state.user = null;
+      resetState();
+      showScreen("login");
+    }
+  }, (err) => {
+    console.error(err);
+    showScreen("login");
+    toast(friendlyError(err), "error");
+  });
+}
+
+init();
