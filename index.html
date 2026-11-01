@@ -183,6 +183,15 @@
         "Gagal memuat aplikasi. Periksa koneksi internet lalu muat ulang halaman.";
     }, 12000);
   </script>
-  <script type="module" src="app.js"></script>
+  <script type="module">
+  import("./app.js").catch(function (err) {
+    console.error(err);
+    var b = document.getElementById("boot");
+    b.querySelector(".spinner").hidden = true;
+    b.querySelector("p").textContent =
+      "Gagal memuat aplikasi: " + (err && err.message ? err.message : err) +
+      ". Pastikan dibuka lewat server (bukan file://) dan semua file ada di repo.";
+  });
+  </script>
 </body>
 </html>
