@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Jadwal &amp; Jurnal Harian</title>
+  <meta name="theme-color" content="#eecaa6" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📓%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Layar memuat -->
+  <div id="boot" class="boot" role="status">
+    <div class="spinner"></div>
+    <p>Memuat…</p>
+  </div>
+  <noscript><p style="padding:24px">Situs ini membutuhkan JavaScript.</p></noscript>
+
+  <!-- Layar login -->
+  <section id="login-screen" class="login-wrap" hidden>
+    <div class="login-card card">
+      <div class="login-badge" aria-hidden="true">📓</div>
+      <h1>Jadwal &amp; Jurnal</h1>
+      <p class="muted">Masuk untuk membuka jadwal dan jurnal harianmu.</p>
+
+      <div id="config-warning" class="notice" hidden>
+        ⚠️ Konfigurasi Firebase belum diisi. Buka <code>firebase-config.js</code> dan isi sesuai README.
+      </div>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" autocomplete="username" inputmode="email" placeholder="nama@email.com" />
+          <p class="error-text" hidden></p>
+        </div>
+        <div class="field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" placeholder="Password" />
+          <p class="error-text" hidden></p>
+        </div>
+        <p id="login-error" class="error-text error-block" role="alert" hidden></p>
+        <button id="login-btn" class="btn btn-primary btn-block" type="submit">Masuk</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Aplikasi -->
+  <div id="app" hidden>
+    <nav class="nav" aria-label="Navigasi utama">
+      <div class="nav-brand"><span aria-hidden="true">📓</span><span>Jadwal &amp; Jurnal</span></div>
+      <a class="nav-link" href="#jadwal" data-view="jadwal"><span class="ico" aria-hidden="true">📅</span><span>Jadwal</span></a>
+      <a class="nav-link" href="#jurnal" data-view="jurnal"><span class="ico" aria-hidden="true">📝</span><span>Jurnal</span></a>
+      <a class="nav-link" href="#profil" data-view="profil"><span class="ico" aria-hidden="true">👤</span><span>Profil</span></a>
+    </nav>
+
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <h1 id="greeting">Halo!</h1>
+          <p id="today-label" class="muted"></p>
+        </div>
+        <button id="logout-btn" class="icon-btn" type="button" aria-label="Keluar" title="Keluar">🚪</button>
+      </header>
+
+      <main>
+        <!-- JADWAL -->
+        <section id="view-jadwal" class="view" hidden>
+          <div class="view-head">
+            <h2>📅 Jadwal Pelajaran</h2>
+            <p id="schedule-sub" class="muted"></p>
+          </div>
+          <div id="schedule-grid" class="day-grid"></div>
+        </section>
+
+        <!-- JURNAL -->
+        <section id="view-jurnal" class="view" hidden>
+          <div class="view-head">
+            <h2>📝 Jurnal Harian</h2>
+            <p class="muted">Catat apa yang kamu pelajari hari ini.</p>
+          </div>
+
+          <form id="journal-form" class="card form-card" novalidate>
+            <div class="form-title">
+              <h3 id="form-title">Tambah Jurnal</h3>
+              <button type="button" id="cancel-edit" class="btn btn-ghost btn-sm" hidden>Batal edit</button>
+            </div>
+
+            <div class="form-row">
+              <div class="field">
+                <label for="j-date">Tanggal</label>
+                <input id="j-date" type="date" />
+                <p class="error-text" hidden></p>
+              </div>
+              <div class="field">
+                <label for="j-period">Jam ke</label>
+                <input id="j-period" type="number" min="1" max="12" step="1" inputmode="numeric" placeholder="1" />
+                <p id="period-hint" class="hint" hidden>📌 Diisi dari jadwal</p>
+                <p class="error-text" hidden></p>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="j-subject">Mata pelajaran</label>
+              <select id="j-subject"></select>
+              <p class="error-text" hidden></p>
+            </div>
+
+            <div class="field">
+              <label for="j-teacher">Guru</label>
+              <input id="j-teacher" type="text" maxlength="60" autocomplete="off" placeholder="Nama guru" />
+              <p id="teacher-hint" class="hint" hidden>💡 Disarankan dari jurnal sebelumnya</p>
+              <p class="error-text" hidden></p>
+            </div>
+
+            <div class="field">
+              <label for="j-topic">Topik utama</label>
+              <textarea id="j-topic" rows="4" maxlength="1000" placeholder="Apa yang dibahas hari ini?"></textarea>
+              <p class="error-text" hidden></p>
+            </div>
+
+            <button id="journal-submit" class="btn btn-primary btn-block" type="submit">💾 Simpan Jurnal</button>
+          </form>
+
+          <div class="history-head"><h3>🗂️ Riwayat Jurnal</h3></div>
+
+          <div class="card filters">
+            <div class="field">
+              <label for="f-date">Filter tanggal</label>
+              <input id="f-date" type="date" />
+            </div>
+            <div class="field">
+              <label for="f-subject">Filter pelajaran</label>
+              <select id="f-subject"></select>
+            </div>
+            <button id="f-reset" class="btn btn-ghost btn-sm" type="button">Reset filter</button>
+          </div>
+
+          <div id="journal-list" class="journal-list"></div>
+        </section>
+
+        <!-- PROFIL -->
+        <section id="view-profil" class="view" hidden>
+          <div class="view-head">
+            <h2>👤 Profil</h2>
+            <p class="muted">Nama kamu dipakai untuk sapaan di bagian atas.</p>
+          </div>
+          <form id="profile-form" class="card form-card" novalidate>
+            <div class="field">
+              <label for="p-name">Nama</label>
+              <input id="p-name" type="text" maxlength="40" autocomplete="name" placeholder="Nama kamu" />
+              <p class="error-text" hidden></p>
+            </div>
+            <button id="profile-submit" class="btn btn-primary btn-block" type="submit">💾 Simpan Profil</button>
+          </form>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Dialog konfirmasi hapus -->
+  <dialog id="confirm-dialog" class="dialog">
+    <form method="dialog">
+      <h3>Hapus jurnal?</h3>
+      <p id="confirm-text" class="muted"></p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" value="cancel">Batal</button>
+        <button class="btn btn-danger" value="ok">Hapus</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <script>
+    // Jaga-jaga kalau modul gagal dimuat (mis. CDN tidak terjangkau)
+    setTimeout(function () {
+      var b = document.getElementById("boot");
+      if (b && !b.hidden) b.querySelector("p").textContent =
+        "Gagal memuat aplikasi. Periksa koneksi internet lalu muat ulang halaman.";
+    }, 12000);
+  </script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
